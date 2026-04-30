@@ -1,0 +1,10 @@
+pandas
+polars
+numpy
+matplotlib
+seaborn
+scipy
+osmnx
+networkx
+geopandas
+shapely
