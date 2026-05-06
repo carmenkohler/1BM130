@@ -1,6 +1,8 @@
 pandas
 polars
 numpy
+openpyxl
+ipykernel
 matplotlib
 seaborn
 scipy
