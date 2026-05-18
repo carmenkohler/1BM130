@@ -10,3 +10,4 @@ osmnx
 networkx
 geopandas
 shapely
+statsmodels

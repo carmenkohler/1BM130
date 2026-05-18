@@ -36,7 +36,7 @@ isochrone = unary_union(node_points.buffer(50))  # 50m smoothing
 
 #Intersect with buurt boundaries from the CBS data
 
-df_kwb2025 = pd.read_excel(r'C:\Users\20212599\OneDrive - TU Eindhoven\Documents\Studie\2025-2026\1BM130 Design of AI-driven business operation\Shared group folder\Data files\CBS\kwb2025.xlsx')
+df_kwb2025 = pd.read_excel(r'C:\Users\20192436\Projects\DesignforAI\Data\CBS\kwb2025.xlsx')
 
 
 gdf = gpd.read_file(r"C:\Users\20212599\OneDrive - TU Eindhoven\Documents\Studie\2025-2026\1BM130 Design of AI-driven business operation\Shared group folder\Data files\CBS\wijkenbuurten_2025_v1.gpkg", layer='buurten')
