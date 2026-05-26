@@ -45,8 +45,8 @@ WORKSPACE = Path(__file__).resolve().parent
 DATASETS_DIR = WORKSPACE / "datasets"
 
 # Paste your Gemini API key here.
-# Example: GEMINI_API_KEY = "AIzaSy..."
-GEMINI_API_KEY = "AIzaSyCWoPw5ivr7K_JTgwkcXSSGVMpR97uIN4A"
+# Example: GEMINI_API_KEY = "bGAK..."
+GEMINI_API_KEY = "PASTE_API_KEY_HERE"
 
 # ============================================================
 # 1. Styling
