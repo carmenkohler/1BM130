@@ -11,18 +11,18 @@ st.sidebar.title("10-Minute Cycling City")
 page = st.sidebar.radio(
     "",
     [
-        "Access-Usage Heatmap",
-        "Essential Function Audit",
-        "What-If Scenario Builder",
-        "AI Policy Assistant",
+        "Access Map",
+        "Equity Audit",
+        "Scenario Builder",
+        "Policy Assistant",
     ],
 )
 
-if page == "Access-Usage Heatmap":
+if page == "Access Map":
     map_feature.render()
-elif page == "Essential Function Audit":
+elif page == "Equity Audit":
     audit_feature.render()
-elif page == "What-If Scenario Builder":
+elif page == "Scenario Builder":
     scenario_feature.render()
 else:
     agent.render()

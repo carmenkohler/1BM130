@@ -52,6 +52,20 @@ AMENITY_COLUMNS = [
     "bike10_klasse_bushalte",
     "bike10_klasse_treinstation",
     "bike10_klasse_voortgezet_onderwijs",
+    "bike10_klasse_kinderopvang",
+    "bike10_klasse_horeca",
+    "bike10_klasse_restaurant",
+    "bike10_klasse_sportterrein",
+    "bike10_klasse_fastfood",
+    "bike10_klasse_kledingwinkel",
+]
+
+CORE_ACCESS_COLUMNS = [
+    "bike10_klasse_supermarkt",
+    "bike10_klasse_huisarts",
+    "bike10_klasse_basisschool",
+    "bike10_klasse_voortgezet_onderwijs",
+    "bike10_klasse_ziekenhuis",
 ]
 
 AMENITY_LABELS = {
@@ -63,7 +77,25 @@ AMENITY_LABELS = {
     "bike10_klasse_bushalte": "Bus stop",
     "bike10_klasse_treinstation": "Train station",
     "bike10_klasse_voortgezet_onderwijs": "Secondary school",
+    "bike10_klasse_kinderopvang": "Childcare",
+    "bike10_klasse_horeca": "Cafes and bars",
+    "bike10_klasse_restaurant": "Restaurant",
+    "bike10_klasse_sportterrein": "Sports facility",
+    "bike10_klasse_fastfood": "Fast food",
+    "bike10_klasse_kledingwinkel": "Clothing shop",
 }
+
+ACCESS_METHOD_NOTE = (
+    "Access follows the Topic 1 weighted bike-access score: neighborhoods score higher when more useful "
+    "destinations are reachable by bike, with higher weight for daily essentials such as supermarkets, GP "
+    "practices and schools. MBO and HBO/WO are not available in the current destination file, so "
+    "higher-education access is a data gap."
+)
+
+USAGE_METHOD_NOTE = (
+    "Cycling share comes from the national travel survey and is available at municipality level. "
+    "Use the gap as a first signal for discussion, not as a final ranking."
+)
 
 
 def _clean_code(value: Any) -> str | None:
@@ -117,10 +149,60 @@ def _pattern_labels(df: pd.DataFrame) -> pd.Series:
             ~high_access & high_usage,
             ~high_access & ~high_usage,
         ],
-        ["Local living", "Policy opportunity", "Access gap", "Underserved"],
+        [
+            "Strong access and cycling",
+            "Good access, low cycling",
+            "Low access, high cycling",
+            "Low access and cycling",
+        ],
         default="Unknown",
     )
     return pd.Series(labels, index=df.index)
+
+
+def _class_access_score(df: pd.DataFrame, columns: list[str]) -> pd.Series:
+    values = df[columns].fillna(0).clip(lower=0, upper=2) / 2
+    return (values.mean(axis=1) * 100).round(1)
+
+
+def _coverage_access_score(df: pd.DataFrame, columns: list[str]) -> pd.Series:
+    return (df[columns].fillna(0).gt(0).mean(axis=1) * 100).round(1)
+
+
+def _topic1_weighted_access_score(df: pd.DataFrame) -> pd.Series:
+    weights = {
+        "bike10_klasse_supermarkt": 0.18,
+        "bike10_klasse_huisarts": 0.14,
+        "bike10_klasse_basisschool": 0.13,
+        "bike10_klasse_ziekenhuis": 0.10,
+        "bike10_klasse_apotheek": 0.07,
+        "bike10_klasse_voortgezet_onderwijs": 0.07,
+        "bike10_klasse_bushalte": 0.06,
+        "bike10_klasse_treinstation": 0.05,
+        "bike10_klasse_kinderopvang": 0.03,
+        "bike10_klasse_horeca": 0.05,
+        "bike10_klasse_restaurant": 0.04,
+        "bike10_klasse_sportterrein": 0.04,
+        "bike10_klasse_fastfood": 0.02,
+        "bike10_klasse_kledingwinkel": 0.02,
+    }
+    score = pd.Series(0.0, index=df.index)
+    active = []
+    for col, weight in weights.items():
+        if col not in df.columns:
+            continue
+        values = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        if values.nunique(dropna=True) <= 1:
+            continue
+        active.append((values, weight))
+
+    total_weight = sum(weight for _, weight in active)
+    if total_weight == 0:
+        return score
+
+    for values, weight in active:
+        score += values.rank(pct=True) * 100 * (weight / total_weight)
+    return score.round(1)
 
 
 def _build_neighborhood_data() -> pd.DataFrame:
@@ -158,21 +240,12 @@ def _build_neighborhood_data() -> pd.DataFrame:
         if col not in df.columns:
             df[col] = np.nan
 
-    amenity_binary = df[AMENITY_COLUMNS].fillna(0).gt(0).astype(float)
-    weights = pd.Series(
-        {
-            "bike10_klasse_supermarkt": 1.30,
-            "bike10_klasse_huisarts": 1.20,
-            "bike10_klasse_basisschool": 1.20,
-            "bike10_klasse_apotheek": 1.10,
-            "bike10_klasse_bushalte": 0.90,
-            "bike10_klasse_treinstation": 0.80,
-            "bike10_klasse_voortgezet_onderwijs": 0.90,
-            "bike10_klasse_ziekenhuis": 0.60,
-        }
-    )
-    df["bike10_weighted_score"] = (amenity_binary.mul(weights, axis=1).sum(axis=1) / weights.sum() * 100).round(1)
-    df["bike10_score"] = (amenity_binary.mean(axis=1) * 100).round(1)
+    df["bike10_weighted_score"] = _topic1_weighted_access_score(df)
+    df["bike10_core_score"] = df["bike10_weighted_score"]
+    df["bike10_policy_score"] = _coverage_access_score(df, AMENITY_COLUMNS)
+    df["bike10_intensity_score"] = _class_access_score(df, CORE_ACCESS_COLUMNS)
+    df["bike10_coverage_score"] = _coverage_access_score(df, CORE_ACCESS_COLUMNS)
+    df["bike10_score"] = df["bike10_policy_score"]
 
     df["buurtcode"] = df["Buurt2025"].map(_clean_code)
     df["buurtnaam"] = df["buurtnaam2025"]
@@ -182,7 +255,9 @@ def _build_neighborhood_data() -> pd.DataFrame:
     df["pct_bike"] = pd.to_numeric(df["bike_share_pct"], errors="coerce")
     df["pct_within_3km"] = pd.to_numeric(df["local_trip_share_pct"], errors="coerce")
     df["access_usage_gap"] = (df["bike10_weighted_score"] - df["pct_bike"]).round(1)
-    df["pattern_label"] = _pattern_labels(df)
+    df["access_scale"] = "Topic 1 weighted neighborhood bike-access score"
+    df["bike_share_scale"] = "municipality travel-survey cycling share"
+    df["gap_scale"] = "neighborhood access / municipality cycling usage"
 
     keep = [
         "buurtcode",
@@ -194,16 +269,23 @@ def _build_neighborhood_data() -> pd.DataFrame:
         "a_inw",
         "bev_dich",
         "g_ink_pi",
+        "bike10_core_score",
+        "bike10_policy_score",
+        "bike10_intensity_score",
+        "bike10_coverage_score",
         "bike10_weighted_score",
         "bike10_score",
         "pct_bike",
         "pct_within_3km",
         "access_usage_gap",
-        "pattern_label",
+        "access_scale",
+        "bike_share_scale",
+        "gap_scale",
         "weighted_trips",
     ] + AMENITY_COLUMNS
     df = df[keep].copy()
     df = df[df["a_inw"].fillna(0) >= 200].reset_index(drop=True)
+    df["pattern_label"] = _pattern_labels(df)
 
     df = _enrich_income_from_kwb2024(df)
     LOCAL_DATA_DIR.mkdir(exist_ok=True)
@@ -231,10 +313,20 @@ def _enrich_income_from_kwb2024(df: pd.DataFrame) -> pd.DataFrame:
     return enriched.drop(columns=["g_ink_pi_2024"])
 
 
-@st.cache_data(show_spinner=False)
 def load_neighborhood_data() -> pd.DataFrame:
     if NEIGHBORHOOD_CSV.exists():
         df = pd.read_csv(NEIGHBORHOOD_CSV)
+        required = {
+            "bike10_core_score",
+            "bike10_policy_score",
+            "bike10_intensity_score",
+            "bike10_coverage_score",
+            "access_scale",
+            "bike_share_scale",
+            "gap_scale",
+        }
+        if not required.issubset(df.columns):
+            return _build_neighborhood_data()
         if "HHGestInkG" in df.columns and not df["HHGestInkG"].notna().any():
             df = _enrich_income_from_kwb2024(df)
             df.to_csv(NEIGHBORHOOD_CSV, index=False)

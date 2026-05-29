@@ -7,6 +7,8 @@ import streamlit as st
 
 from .agent import summarize_scenario
 from .data_loader import (
+    ACCESS_METHOD_NOTE,
+    USAGE_METHOD_NOTE,
     AMENITY_LABELS,
     get_neighborhood_options,
     load_model,
@@ -46,15 +48,15 @@ def run_proxy_scenario(row: pd.Series, intervention: str) -> dict:
         current_class = float(row.get(changed_feature, 0) or 0)
         if current_class <= 0:
             scenario_access = min(100.0, baseline_access + 8.0)
-            intervention_note = "The selected amenity is currently missing, so the proxy adds local access."
+            intervention_note = "The selected destination is currently missing, so the scenario adds local access."
         elif current_class < 2:
             scenario_access = min(100.0, baseline_access + 4.0)
-            intervention_note = "The amenity is present but weakly represented, so the proxy adds a smaller access gain."
+            intervention_note = "The selected destination is present but limited, so the scenario adds a smaller access gain."
         else:
-            intervention_note = "The amenity is already strongly represented, so no access gain is applied."
+            intervention_note = "The selected destination is already reachable, so the access score does not change."
     elif intervention == "Improve cycling infrastructure":
-        scenario_access = min(100.0, baseline_access + 15.0)
-        intervention_note = "The proxy increases the cycling accessibility score directly."
+        scenario_access = min(100.0, baseline_access + 10.0)
+        intervention_note = "The scenario assumes better cycling routes make more destinations practically reachable."
     elif intervention == "Reduce car dependency":
         intervention_note = "The proxy shifts a small share of non-bike trips towards cycling."
 
@@ -103,7 +105,7 @@ def run_model_scenario(row: pd.Series, intervention: str, model, metadata: dict)
 
     trips = load_scenario_trips(feature_columns)
     if trips.empty:
-        return run_proxy_scenario(row, intervention), "Representative ODiN trip data could not be built."
+        return run_proxy_scenario(row, intervention), "Representative travel-survey trips could not be built."
 
     buurtcode = str(row["buurtcode"])
     gm_code = str(row["gm_code"])
@@ -113,7 +115,7 @@ def run_model_scenario(row: pd.Series, intervention: str, model, metadata: dict)
         sample = trips[trips["gm_code"].astype(str).eq(gm_code)].copy()
         sample_scope = "municipality fallback"
     if len(sample) < 30:
-        return run_proxy_scenario(row, intervention), "Fewer than 30 representative ODiN trips were available."
+        return run_proxy_scenario(row, intervention), "Fewer than 30 representative travel-survey trips were available."
     if len(sample) > 3000:
         sample = sample.sample(3000, random_state=42)
 
@@ -137,12 +139,12 @@ def run_model_scenario(row: pd.Series, intervention: str, model, metadata: dict)
             before = pd.to_numeric(scenario_x[changed_feature], errors="coerce").fillna(0)
             scenario_x[changed_feature] = np.maximum(before, 1)
             if before.max() >= 1 and before.min() >= 1:
-                intervention_note = "The selected amenity was already present in the representative trips."
+                intervention_note = "The selected destination was already reachable in the representative trips."
             else:
                 scenario_access = min(100.0, baseline_access + 8.0)
         elif intervention == "Improve cycling infrastructure":
             scenario_x[changed_feature] = pd.to_numeric(scenario_x[changed_feature], errors="coerce").fillna(0) + 15
-            scenario_access = min(100.0, baseline_access + 15.0)
+            scenario_access = min(100.0, baseline_access + 10.0)
         elif intervention == "Reduce car dependency":
             cars = pd.to_numeric(scenario_x[changed_feature], errors="coerce").fillna(0)
             scenario_x[changed_feature] = np.maximum(cars - 1, 0)
@@ -177,7 +179,12 @@ def run_model_scenario(row: pd.Series, intervention: str, model, metadata: dict)
 def render() -> None:
     df = load_neighborhood_data()
     model, metadata = load_model()
-    st.subheader("What-If Scenario Builder")
+    st.subheader("Scenario Builder")
+    st.caption(f"{ACCESS_METHOD_NOTE} {USAGE_METHOD_NOTE}")
+    st.info(
+        "Policy interpretation: scenarios estimate whether an intervention could make cycling more attractive. "
+        "They are screening estimates, not final forecasts."
+    )
 
     options = get_neighborhood_options(df)
     selected_label = st.sidebar.selectbox("Neighborhood", options)
@@ -193,8 +200,8 @@ def render() -> None:
         )
     else:
         st.info(
-            "Topic 2 model artifact loaded. Scenarios use representative ODiN origin trips and fall back "
-            "to the municipality level when a neighborhood has fewer than 30 linked trips."
+            "Topic 2 model artifact loaded. Scenarios use representative travel-survey trips linked through "
+            "postcode and neighborhood data. If there are too few local trips, the app uses the municipality instead."
         )
 
     if st.sidebar.button("Run Scenario", type="primary"):
@@ -208,8 +215,8 @@ def render() -> None:
             st.warning(warning)
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Baseline cycling share", f"{result['baseline_bike_share']:.1f}%")
-        c2.metric("Scenario cycling share", f"{result['scenario_bike_share']:.1f}%")
+        c1.metric("Current cycling estimate", f"{result['baseline_bike_share']:.1f}%")
+        c2.metric("Scenario cycling estimate", f"{result['scenario_bike_share']:.1f}%")
         c3.metric("Predicted change", f"{result['delta_bike_share_pp']:+.1f} pp")
 
         if "baseline_mode_shares" in result:

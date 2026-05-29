@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,15 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from .data_loader import AMENITY_COLUMNS, AMENITY_LABELS, DASHBOARD_DIR, load_model, load_neighborhood_data
+from .data_loader import (
+    ACCESS_METHOD_NOTE,
+    AMENITY_COLUMNS,
+    AMENITY_LABELS,
+    DASHBOARD_DIR,
+    USAGE_METHOD_NOTE,
+    load_model,
+    load_neighborhood_data,
+)
 
 
 SYSTEM_PROMPT_PATH = DASHBOARD_DIR / "prompts" / "system_prompt.txt"
@@ -21,6 +30,52 @@ PLACEHOLDER_KEY = "paste_your_gemini_key_here"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 LAST_GEMINI_ERROR: str | None = None
+
+
+def _income_group_label(value: Any) -> str | None:
+    if pd.isna(value):
+        return None
+    decile = int(value)
+    if decile <= 2:
+        return "Lowest income areas"
+    if decile <= 4:
+        return "Lower-middle income areas"
+    if decile <= 6:
+        return "Middle income areas"
+    if decile <= 8:
+        return "Higher-middle income areas"
+    return "Highest income areas"
+
+
+def _urbanisation_label(value: Any) -> str | None:
+    labels = {
+        1: "Very urban",
+        2: "Urban",
+        3: "Moderately urban",
+        4: "Low urban",
+        5: "Rural",
+    }
+    if pd.isna(value):
+        return None
+    return labels.get(int(value))
+
+
+@dataclass
+class PolicyAgentResult:
+    answer: str
+    tool_name: str
+    context: Any
+    trace: list[dict[str, Any]]
+    llm_status: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "answer": self.answer,
+            "tool_name": self.tool_name,
+            "context": self.context,
+            "trace": self.trace,
+            "llm_status": self.llm_status,
+        }
 
 
 def _system_prompt() -> str:
@@ -66,17 +121,20 @@ def get_neighborhood_profile(buurtcode: str) -> dict[str, Any]:
     df = load_neighborhood_data()
     row = df.loc[df["buurtcode"].astype(str) == str(buurtcode)]
     if row.empty:
-        return {"error": f"No neighborhood found for buurtcode {buurtcode}."}
+        return {"error": f"No neighborhood found for code {buurtcode}."}
     r = row.iloc[0]
     return {
         "buurtcode": r["buurtcode"],
         "buurtnaam": r["buurtnaam"],
         "gemeentenaam": r["gemeentenaam"],
-        "access_score": round(float(r["bike10_weighted_score"]), 1),
-        "cycling_share_pct": round(float(r["pct_bike"]), 1),
-        "access_usage_gap_pp": round(float(r["access_usage_gap"]), 1),
-        "income_decile": None if pd.isna(r["HHGestInkG"]) else int(r["HHGestInkG"]),
-        "urbanisation_class": None if pd.isna(r["Sted"]) else int(r["Sted"]),
+        "topic1_bike_access_score": round(float(r["bike10_weighted_score"]), 1),
+        "key_destination_coverage": round(float(r["bike10_coverage_score"]), 1),
+        "all_listed_destinations_coverage": round(float(r["bike10_policy_score"]), 1),
+        "municipal_cycling_share_pct": round(float(r["pct_bike"]), 1),
+        "discussion_gap_pp": round(float(r["access_usage_gap"]), 1),
+        "method_note": f"{ACCESS_METHOD_NOTE} {USAGE_METHOD_NOTE}",
+        "income_group": _income_group_label(r["HHGestInkG"]),
+        "area_type": _urbanisation_label(r["Sted"]),
         "pattern_label": r["pattern_label"],
     }
 
@@ -98,11 +156,11 @@ def get_municipality_summary(gemeentenaam: str) -> dict[str, Any]:
     return {
         "gemeentenaam": gemeentenaam,
         "neighborhoods": int(len(mun)),
-        "mean_access_score": round(float(mun["bike10_weighted_score"].mean()), 1),
-        "mean_cycling_share_pct": round(float(mun["pct_bike"].mean()), 1),
-        "mean_gap_pp": round(float(mun["access_usage_gap"].mean()), 1),
+        "mean_topic1_bike_access_score": round(float(mun["bike10_weighted_score"].mean()), 1),
+        "mean_municipal_cycling_share_pct": round(float(mun["pct_bike"].mean()), 1),
+        "mean_discussion_gap_pp": round(float(mun["access_usage_gap"].mean()), 1),
+        "method_note": f"{ACCESS_METHOD_NOTE} {USAGE_METHOD_NOTE}",
         "pattern_counts": mun["pattern_label"].value_counts().to_dict(),
-        "income_decile_counts": mun["HHGestInkG"].value_counts(dropna=True).sort_index().to_dict(),
     }
 
 
@@ -116,12 +174,12 @@ def get_amenity_gap(amenity: str) -> dict[str, Any]:
     df = load_neighborhood_data().copy()
     df["lacks_amenity"] = ~df[amenity].fillna(0).gt(0)
     return {
-        "amenity": AMENITY_LABELS.get(amenity, amenity),
-        "overall_lacking_pct": round(float(df["lacks_amenity"].mean() * 100), 1),
-        "lacking_by_urbanisation_pct": (
+        "destination": AMENITY_LABELS.get(amenity, amenity),
+        "neighborhoods_without_access_pct": round(float(df["lacks_amenity"].mean() * 100), 1),
+        "without_access_by_area_type_pct": (
             df.groupby("Sted")["lacks_amenity"].mean().mul(100).round(1).to_dict()
         ),
-        "lacking_by_income_decile_pct": (
+        "without_access_by_income_group_pct": (
             df.groupby("HHGestInkG")["lacks_amenity"].mean().mul(100).round(1).to_dict()
         ),
     }
@@ -131,7 +189,7 @@ def get_scenario_result(buurtcode: str, intervention: str) -> dict[str, Any]:
     df = load_neighborhood_data()
     row = df.loc[df["buurtcode"].astype(str).eq(str(buurtcode))]
     if row.empty:
-        return {"error": f"No neighborhood found for buurtcode {buurtcode}."}
+        return {"error": f"No neighborhood found for code {buurtcode}."}
 
     from .scenario_feature import INTERVENTIONS, run_model_scenario, run_proxy_scenario
 
@@ -150,11 +208,11 @@ def get_scenario_result(buurtcode: str, intervention: str) -> dict[str, Any]:
 def summarize_scenario(result: dict[str, Any]) -> str:
     return (
         f"For {result['buurtnaam']} in {result['gemeentenaam']}, the {result['intervention'].lower()} scenario "
-        f"changes the access score from {result['baseline_access_score']:.1f} to "
-        f"{result['scenario_access_score']:.1f}. The estimated cycling-share change is "
+        f"changes the Topic 1 bike-access score from {result['baseline_access_score']:.1f} to "
+        f"{result['scenario_access_score']:.1f}. The estimated modeled cycling-share change is "
         f"{result['delta_bike_share_pp']:+.1f} percentage points using a {result['method']}. "
         f"{result.get('intervention_note', '')} "
-        "Treat this as a screening estimate because it depends on representative ODiN trips and model features. "
+        "Treat this as a screening estimate because it uses survey trips and model features. "
         "Recommendation: validate the intervention against observed trip-purpose demand before prioritising investment."
     )
 
@@ -258,15 +316,84 @@ def _call_gemini(prompt: str) -> str | None:
         return None
 
 
-def answer_question(user_message: str, selected_buurt: str | None = None) -> str:
-    dispatched = _dispatch(user_message, selected_buurt)
-    prompt = f"{_system_prompt()}\n\nData context:\n{dispatched}\n\nUser question: {user_message}"
-    key_configured = gemini_key_configured()
-    response = _call_gemini(prompt)
-    if response:
-        return response
+def _llm_status(used_gemini: bool) -> dict[str, Any]:
+    return {
+        "enabled": gemini_key_configured(),
+        "provider": "Google Gemini REST API",
+        "model": os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+        "used_gemini": used_gemini,
+        "error": LAST_GEMINI_ERROR,
+    }
 
-    return _format_fallback_answer(dispatched, key_configured)
+
+def _build_agent_prompt(dispatched: dict[str, Any], user_message: str) -> str:
+    context = {
+        "selected_tool": dispatched["tool"],
+        "tool_context": dispatched["context"],
+        "user_question": user_message,
+        "agent_rules": [
+            "Use only the provided dashboard tool context.",
+            "Do not invent numerical values.",
+            "Explain the policy relevance in plain language.",
+            "Say that cycling share is based on municipality-level travel-survey data when discussing bike usage.",
+            "Say that the gap is a discussion signal because it compares neighborhood access with municipality cycling usage.",
+            "End with one concrete recommendation.",
+            "Keep the answer under five sentences.",
+        ],
+    }
+    return f"{_system_prompt()}\n\nDashboard agent context JSON:\n{context}\n\nUser question: {user_message}"
+
+
+def run_policy_agent(user_message: str, selected_buurt: str | None = None) -> PolicyAgentResult:
+    trace: list[dict[str, Any]] = [
+        {
+            "agent": "Intent router",
+            "summary": "Selected the most relevant dashboard tool from the user question.",
+            "details": {"question": user_message, "selected_buurt": selected_buurt},
+        }
+    ]
+    dispatched = _dispatch(user_message, selected_buurt)
+    trace.append(
+        {
+            "agent": "DashboardTools",
+            "summary": f"Executed Python tool `{dispatched['tool']}` before calling the LLM.",
+            "details": dispatched["context"],
+        }
+    )
+
+    prompt = _build_agent_prompt(dispatched, user_message)
+    response = _call_gemini(prompt)
+    used_gemini = bool(response)
+    if response:
+        answer = response
+        trace.append(
+            {
+                "agent": "Gemini policy explainer",
+                "summary": "Generated final answer from the Python tool output.",
+                "details": _llm_status(used_gemini=True),
+            }
+        )
+    else:
+        answer = _format_fallback_answer(dispatched, gemini_key_configured())
+        trace.append(
+            {
+                "agent": "Deterministic fallback",
+                "summary": "Gemini was unavailable, so the dashboard generated a grounded fallback answer.",
+                "details": _llm_status(used_gemini=False),
+            }
+        )
+
+    return PolicyAgentResult(
+        answer=answer,
+        tool_name=dispatched["tool"],
+        context=dispatched["context"],
+        trace=trace,
+        llm_status=_llm_status(used_gemini=used_gemini),
+    )
+
+
+def answer_question(user_message: str, selected_buurt: str | None = None) -> str:
+    return run_policy_agent(user_message, selected_buurt).answer
 
 
 def _fallback_reason(key_configured: bool) -> str:
@@ -296,7 +423,7 @@ def _format_fallback_answer(dispatched: dict[str, Any], key_configured: bool = F
             f"Using `{dispatched['tool']}`, the strongest candidates are:\n\n"
             f"{findings}\n\n"
             f"{_fallback_reason(key_configured)} "
-            "Use these neighborhoods as a shortlist for a concrete access intervention."
+            "Use these neighborhoods as a shortlist for a concrete access intervention; validate with local observations."
         )
 
     if isinstance(context, dict) and "error" not in context:
@@ -317,12 +444,12 @@ def _format_fallback_answer(dispatched: dict[str, Any], key_configured: bool = F
 
     return (
         "I could not find enough local context for that question. "
-        "Try asking about a municipality, amenity gap, low access, low cycling share, or the selected neighborhood."
+        "Try asking about a municipality, missing destinations, low access, low cycling share, or the selected neighborhood."
     )
 
 
 def render() -> None:
-    st.subheader("AI Policy Assistant")
+    st.subheader("Policy Assistant")
     if gemini_key_configured():
         st.caption("Gemini API key detected from `.env` or Streamlit secrets.")
     else:
@@ -335,13 +462,32 @@ def render() -> None:
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.write(message["content"])
+            if message["role"] == "assistant" and message.get("trace"):
+                with st.expander("Agent trace"):
+                    for step in message["trace"]:
+                        st.markdown(f"**{step['agent']}**")
+                        st.write(step["summary"])
+                        st.json(step.get("details", {}))
 
-    user_message = st.chat_input("Ask about a neighborhood, municipality, amenity gap, or policy opportunity")
+    user_message = st.chat_input("Ask about a neighborhood, municipality, missing destination, or policy opportunity")
     if user_message:
         st.session_state.messages.append({"role": "user", "content": user_message})
         with st.chat_message("user"):
             st.write(user_message)
-        answer = answer_question(user_message, selected_buurt)
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+        with st.spinner("Running dashboard tools and Gemini policy agent..."):
+            result = run_policy_agent(user_message, selected_buurt)
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": result.answer,
+                "trace": result.trace,
+                "llm_status": result.llm_status,
+            }
+        )
         with st.chat_message("assistant"):
-            st.write(answer)
+            st.write(result.answer)
+            with st.expander("Agent trace"):
+                for step in result.trace:
+                    st.markdown(f"**{step['agent']}**")
+                    st.write(step["summary"])
+                    st.json(step.get("details", {}))

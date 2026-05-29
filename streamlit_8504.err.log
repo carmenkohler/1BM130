@@ -1,0 +1,14 @@
+2026-05-24 16:44:47.976 No ASGI app assignments found in C:\Users\daanr\OneDrive - TU Eindhoven\School\1BM130\Github\1BM130\dashboard\app.py
+2026-05-24 16:44:48.092 Filtered 93 packages down to 2 candidates for component scanning
+2026-05-24 16:44:48.095 Scanning 2 candidate packages for component manifests using 2 worker threads
+2026-05-24 16:44:48.145 Found 0 component manifests total
+2026-05-24 16:44:48.147 No asset roots to watch
+2026-05-24 16:44:48.148 File watching not started
+2026-05-24 16:44:48.149 Starting new event loop for server
+2026-05-24 16:44:48.150 Starting server...
+2026-05-24 16:44:48.190 Starting uvicorn server on 0.0.0.0:8504
+2026-05-24 16:44:48.216 Runtime state: RuntimeState.INITIAL -> RuntimeState.NO_SESSIONS_CONNECTED
+2026-05-24 16:44:48.216 Uvicorn server started on 0.0.0.0:8504
+2026-05-24 16:44:48.529 Did not auto detect external IP.
+Please go to https://docs.streamlit.io/ for debugging hints.
+2026-05-24 16:44:48.536 Setting up signal handler

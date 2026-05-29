@@ -7,15 +7,44 @@ import streamlit as st
 from branca.colormap import LinearColormap
 from streamlit_folium import st_folium
 
-from .data_loader import load_buurt_centroids, load_buurt_geometries, load_neighborhood_data
+from .data_loader import ACCESS_METHOD_NOTE, USAGE_METHOD_NOTE, load_buurt_centroids, load_buurt_geometries, load_neighborhood_data
 
+
+INCOME_FILTERS = {
+    "All income groups": None,
+    "Lowest income areas": (1, 2),
+    "Lower-middle income areas": (3, 4),
+    "Middle income areas": (5, 6),
+    "Higher-middle income areas": (7, 8),
+    "Highest income areas": (9, 10),
+}
+
+INCOME_LABELS = {
+    1: "Lowest income areas",
+    2: "Lowest income areas",
+    3: "Lower-middle income areas",
+    4: "Lower-middle income areas",
+    5: "Middle income areas",
+    6: "Middle income areas",
+    7: "Higher-middle income areas",
+    8: "Higher-middle income areas",
+    9: "Highest income areas",
+    10: "Highest income areas",
+}
 
 PATTERN_COLORS = {
-    "Local living": "#2e7d32",
-    "Policy opportunity": "#f57c00",
-    "Access gap": "#1976d2",
-    "Underserved": "#c62828",
+    "Strong access and cycling": "#2e7d32",
+    "Good access, low cycling": "#f57c00",
+    "Low access, high cycling": "#1976d2",
+    "Low access and cycling": "#c62828",
     "Unknown": "#777777",
+}
+
+METRIC_LABELS = {
+    "bike10_weighted_score": "Topic 1 bike-access score",
+    "pct_bike": "Municipal cycling share",
+    "access_usage_gap": "Discussion gap",
+    "pattern_label": "Policy pattern",
 }
 
 
@@ -44,7 +73,7 @@ def _draw_spatial_map(filtered: pd.DataFrame, metric: str, municipality: str) ->
         gdf = load_buurt_geometries(municipality)
         gdf = gdf.merge(filtered, on="buurtcode", how="inner")
         if gdf.empty:
-            st.info("No geometries found for the selected municipality.")
+            st.info("No map shapes found for the selected municipality.")
             return
 
         minx, miny, maxx, maxy = gdf.total_bounds
@@ -71,26 +100,33 @@ def _draw_spatial_map(filtered: pd.DataFrame, metric: str, municipality: str) ->
             "access_usage_gap",
             "pattern_label",
         ]
-        popup_fields = tooltip_fields + ["HHGestInkG"]
+        popup_fields = tooltip_fields + ["income_group_label"]
         folium.GeoJson(
             gdf,
             name="Neighborhoods",
             style_function=style_function,
             tooltip=folium.GeoJsonTooltip(
                 fields=tooltip_fields,
-                aliases=["Neighborhood", "Access", "Bike share", "Gap", "Pattern"],
+                aliases=["Neighborhood", "Topic 1 bike-access score", "Municipal cycling share", "Discussion gap", "Pattern"],
                 localize=True,
                 sticky=True,
             ),
             popup=folium.GeoJsonPopup(
                 fields=popup_fields,
-                aliases=["Neighborhood", "Access score", "Cycling share (%)", "Gap (pp)", "Pattern", "Income decile"],
+                aliases=[
+                    "Neighborhood",
+                    "Topic 1 bike-access score",
+                    "Municipal cycling share (%)",
+                    "Discussion gap (pp)",
+                    "Pattern",
+                    "Income group",
+                ],
                 localize=True,
                 labels=True,
             ),
         ).add_to(fmap)
         if colormap is not None:
-            colormap.caption = metric
+            colormap.caption = METRIC_LABELS.get(metric, metric)
             colormap.add_to(fmap)
         st_folium(fmap, use_container_width=True, height=560)
         return
@@ -117,68 +153,72 @@ def _draw_spatial_map(filtered: pd.DataFrame, metric: str, municipality: str) ->
             weight=0,
             tooltip=(
                 f"{row.buurtnaam}<br>{row.gemeentenaam}<br>"
-                f"Access: {row.bike10_weighted_score:.1f}<br>"
-                f"Bike share: {row.pct_bike:.1f}%<br>"
-                f"Gap: {row.access_usage_gap:+.1f} pp<br>"
+                f"Topic 1 bike-access score: {row.bike10_weighted_score:.1f}<br>"
+                f"Municipal cycling share: {row.pct_bike:.1f}%<br>"
+                f"Discussion gap: {row.access_usage_gap:+.1f} pp<br>"
                 f"{row.pattern_label}"
             ),
             popup=(
                 f"<b>{row.buurtnaam}</b><br>"
                 f"{row.gemeentenaam}<br>"
-                f"Buurtcode: {row.buurtcode}<br>"
-                f"Access score: {row.bike10_weighted_score:.1f}<br>"
-                f"Cycling share: {row.pct_bike:.1f}%<br>"
-                f"Gap: {row.access_usage_gap:+.1f} pp<br>"
+                f"Neighborhood code: {row.buurtcode}<br>"
+                f"Topic 1 bike-access score: {row.bike10_weighted_score:.1f}<br>"
+                f"Municipal cycling share: {row.pct_bike:.1f}%<br>"
+                f"Discussion gap: {row.access_usage_gap:+.1f} pp<br>"
                 f"Pattern: {row.pattern_label}"
             ),
         ).add_to(fmap)
     if colormap is not None:
-        colormap.caption = metric
+        colormap.caption = METRIC_LABELS.get(metric, metric)
         colormap.add_to(fmap)
     st_folium(fmap, use_container_width=True, height=560)
 
 
 def _style_row(row: pd.Series) -> str:
-    color = PATTERN_COLORS.get(row.get("pattern_label"), "#777777")
+    color = PATTERN_COLORS.get(row.get("pattern_label", row.get("Policy pattern")), "#777777")
     return [f"background-color: {color}; color: white"] * len(row)
 
 
 def render() -> None:
     df = load_neighborhood_data()
-    st.subheader("Access-Usage Heatmap")
+    st.subheader("Access Map")
+    st.caption(f"{ACCESS_METHOD_NOTE} {USAGE_METHOD_NOTE}")
 
     metric = st.sidebar.selectbox(
         "Metric",
         ["bike10_weighted_score", "pct_bike", "access_usage_gap", "pattern_label"],
         format_func=lambda x: {
-            "bike10_weighted_score": "Bike-10 access score",
-            "pct_bike": "Municipal cycling share",
-            "access_usage_gap": "Access-usage gap",
-            "pattern_label": "Policy pattern",
+            **METRIC_LABELS,
         }[x],
     )
     municipalities = ["All municipalities"] + sorted(df["gemeentenaam"].dropna().unique().tolist())
     municipality = st.sidebar.selectbox("Municipality", municipalities)
     has_income = df["HHGestInkG"].notna().any()
-    income = st.sidebar.slider("Income decile", 1, 10, (1, 10), disabled=not has_income)
+    income_group = st.sidebar.selectbox("Income level of area", list(INCOME_FILTERS), disabled=not has_income)
     if not has_income:
-        st.sidebar.caption("Income deciles are unavailable in the current dashboard dataset.")
+        st.sidebar.caption("Income information is unavailable in the current dashboard dataset.")
+    else:
+        st.sidebar.caption("Income groups compare neighborhoods by average income: lowest is the bottom 20%, highest is the top 20%.")
 
     filtered = df.copy()
-    if has_income and income != (1, 10):
+    income = INCOME_FILTERS[income_group]
+    if has_income and income is not None:
         filtered = filtered[filtered["HHGestInkG"].between(income[0], income[1], inclusive="both")]
     if municipality != "All municipalities":
         filtered = filtered[filtered["gemeentenaam"] == municipality]
+    filtered = filtered.copy()
+    filtered["income_group_label"] = filtered["HHGestInkG"].round().astype("Int64").map(INCOME_LABELS).fillna("Unknown")
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Neighborhoods", f"{len(filtered):,}")
-    c2.metric("Mean access", f"{filtered['bike10_weighted_score'].mean():.1f}")
-    c3.metric("Mean cycling share", f"{filtered['pct_bike'].mean():.1f}%")
-    c4.metric("Mean gap", f"{filtered['access_usage_gap'].mean():+.1f} pp")
+    c1.metric("Neighborhoods shown", f"{len(filtered):,}")
+    c2.metric("Average access score", f"{filtered['bike10_weighted_score'].mean():.1f}")
+    c3.metric("Municipal cycling share", f"{filtered['pct_bike'].mean():.1f}%")
+    c4.metric("Discussion gap", f"{filtered['access_usage_gap'].mean():+.1f} pp")
 
     st.caption(
-        "Full-country view uses centroid markers for speed. Select a municipality to show CBS buurt polygons "
-        "from `wijkenbuurten_2024_v2.gpkg`."
+        "This is the same weighted bike-access score used in Topic 1. "
+        "The table also shows simple key-destination coverage as a supporting explanation. "
+        "Select a municipality to zoom in on neighborhood map areas."
     )
 
     _draw_spatial_map(filtered, metric, municipality)
@@ -191,14 +231,14 @@ def render() -> None:
             y="pct_bike",
             color=color,
             hover_name="buurtnaam",
-            hover_data=["gemeentenaam", "HHGestInkG", "access_usage_gap", "pattern_label"],
+            hover_data=["gemeentenaam", "income_group_label", "access_usage_gap", "pattern_label"],
             color_discrete_map=PATTERN_COLORS,
             labels={
-                "bike10_weighted_score": "Bike-10 access score",
-                "pct_bike": "Cycling share (%)",
-                "access_usage_gap": "Access-usage gap",
+                "bike10_weighted_score": "Topic 1 bike-access score",
+                "pct_bike": "Municipal cycling share (%)",
+                "access_usage_gap": "Discussion gap",
             },
-            title="Access versus cycling usage",
+            title="Access to key destinations compared with cycling use",
         ),
         use_container_width=True,
     )
@@ -207,14 +247,29 @@ def render() -> None:
         "buurtnaam",
         "gemeentenaam",
         "bike10_weighted_score",
+        "bike10_coverage_score",
+        "bike10_policy_score",
         "pct_bike",
         "access_usage_gap",
-        "HHGestInkG",
+        "income_group_label",
         "pattern_label",
     ]
     table = filtered.sort_values(metric if metric != "pattern_label" else "access_usage_gap", ascending=True)
+    table_display = table[display_cols].rename(
+        columns={
+            "buurtnaam": "Neighborhood",
+            "gemeentenaam": "Municipality",
+            "bike10_weighted_score": "Topic 1 bike-access score",
+            "bike10_coverage_score": "Key destination coverage",
+            "bike10_policy_score": "All listed destinations coverage",
+            "pct_bike": "Municipal cycling share (%)",
+            "access_usage_gap": "Discussion gap (pp)",
+            "income_group_label": "Income group",
+            "pattern_label": "Policy pattern",
+        }
+    )
     st.dataframe(
-        table[display_cols].head(500).style.apply(_style_row, axis=1),
+        table_display.head(500).style.apply(_style_row, axis=1),
         use_container_width=True,
         height=560,
     )
