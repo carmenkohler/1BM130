@@ -1,84 +1,68 @@
 # 10-Minute Cycling City Policy Dashboard
 
-## 1. Introduction
+## Overview
 
-This project is a minimum viable urban policy dashboard for **Topic 3: LLM-based decision-support interface**.
+This dashboard is the minimum viable product for **Topic 3: LLM-based decision-support interface**.  
+It turns the project outputs into a simple policy tool where a user can inspect 10-minute cycling accessibility, low-income context, local usage patterns, and simple what-if scenarios.
 
-The dashboard translates the results from Topic 1 and Topic 2 into a simple interactive tool for policymakers. It focuses on **low-income residents** and helps users explore whether selected municipalities have good 10-minute cycling access to essential amenities, where low-access neighbourhoods are located, how low-income mode choice behaves in the ODiN data, and what policy actions may be useful under simple what-if scenarios.
+The current dashboard focuses on:
 
-The dashboard is built with:
+- **10-minute cycling access** to essential amenities.
+- **Low-income neighbourhood context** using `p_ink_li`.
+- **First-10-minute usage** using `pct_within_10min`.
+- **Municipality and neighbourhood inspection** through maps and interactive graphs.
+- **Scenario testing** for amenity or accessibility improvements.
+- **Gemini / fallback assistant** for policy-oriented explanations.
 
-- **Python**
-- **Streamlit** for the interface
-- **Plotly** for interactive graphs
-- **Pandas / NumPy** for data handling
-- **Gemini API** for the optional LLM-based policy assistant
-
-The LLM assistant does **not** replace the predictive or descriptive models. It acts as an explanation layer that summarizes dashboard results and gives policy-oriented recommendations based on the selected municipality and scenario.
-
----
-
-## 2. Main Workflow
-
-The current version of the dashboard no longer asks the user to manually upload or choose many files. Instead, it automatically searches the local `datasets/` folder and detects the three expected project datasets.
-
-The interface contains:
-
-1. **Three dataset bubbles** showing whether the required datasets were found.
-2. **Dashboard controls** in the sidebar for selecting a municipality and a what-if scenario.
-3. **Municipality summary cards** showing access score, low-income share, and low-access neighbourhood share.
-4. **A graph carousel** where the user can move through different result graphs with Previous / Next buttons.
-5. **A Gemini scenario assistant** at the bottom for natural-language policy questions.
 
 ---
 
-## 3. Folder Setup
+## What the Dashboard Does
 
-Use this folder structure:
+The dashboard automatically searches the local `datasets/` folder for the required project data and then builds an interface with:
+
+1. Dataset status cards showing whether the required files were found.
+2. A Netherlands municipality map for selecting a municipality.
+3. A fallback municipality dropdown if the map is unavailable.
+4. A selected municipality summary with:
+   - Bike-10 access score,
+   - low-income share,
+   - low-access neighbourhood share.
+5. A graph explorer with original dataset views.
+6. A separate what-if scenario section with updated scenario graphs.
+7. A policy assistant that explains the selected municipality and scenario.
+
+---
+
+## Folder Setup
+
+Place the dashboard script in the project folder and create a `datasets/` folder next to it.
 
 ```text
 Q4-HW/
-├── topic3py
-└── datasets/
-    ├── kwb2025.xlsx
-    ├── ODiN2024_DANS_Databestand_ Updated.xlsx
-    ├── Bike_Trip purpose.xlsx
-    └── Codeboek_DANS_ODiN_2024.xlsx   # optional but recommended
+├── topic3_dashboard_final.py
+├── datasets/
+│   ├── combined_neighbourhood_dataset.csv
+│   └── Bike_Trip purpose.xlsx              # optional
+└── data_cache/
+    └── topic3/                             # created automatically
 ```
 
-The dashboard expects all data files to be inside the `datasets/` folder.
-
-The script automatically searches for files with names matching:
-
-```text
-kwb2025.xlsx
-ODiN2024_DANS_Databestand_ Updated.xlsx
-Bike_Trip purpose.xlsx
-```
-
-If a required file is missing, the dashboard shows a clear warning in the interface.
+The dashboard creates and uses `data_cache/topic3/` automatically for downloaded map boundary files.
 
 ---
 
-## 4. Required Dataset 1: CBS KWB 2025
+## Required Dataset
 
-### Expected file
+### `combined_neighbourhood_dataset.csv`
 
-```text
-kwb2025.xlsx
-```
-
-### Expected sheet
+This is the main dataset used by the dashboard. It should be placed inside:
 
 ```text
-KWB2025
+datasets/combined_neighbourhood_dataset.csv
 ```
 
-### Purpose in the dashboard
-
-This is the main spatial-access dataset. It provides neighbourhood and municipality-level information about population, income, urbanisation, and distances to essential amenities.
-
-The dashboard uses it to create a **continuous Bike-10 access score**.
+The dashboard expects this file to already contain the merged neighbourhood-level information from the earlier project stages.
 
 ### Required columns
 
@@ -89,152 +73,48 @@ a_inw
 bev_dich
 p_ink_li
 ste_mvs
-g_afs_hp
-g_afs_gs
-g_afs_kv
-g_afs_sc
-g_3km_sc
+pct_within_10min
 ```
 
-### Meaning of key columns
+### Important expected columns
 
-| Column | Meaning |
-|---|---|
-| `regio` | Neighbourhood name |
-| `gm_naam` | Municipality name |
-| `a_inw` | Number of residents |
-| `bev_dich` | Population density |
-| `p_ink_li` | Share of low-income residents |
-| `ste_mvs` | Urbanisation code |
-| `g_afs_hp` | Distance to GP / doctor |
-| `g_afs_gs` | Distance to large supermarket |
-| `g_afs_kv` | Distance to childcare |
-| `g_afs_sc` | Distance to school |
-| `g_3km_sc` | Number of schools within 3 km |
+The dashboard also looks for `bike10_klasse_*` amenity columns, for example:
+
+```text
+bike10_klasse_apotheek
+bike10_klasse_basisschool
+bike10_klasse_bushalte
+bike10_klasse_huisarts
+bike10_klasse_kinderopvang
+bike10_klasse_supermarkt
+bike10_klasse_treinstation
+bike10_klasse_voortgezet_onderwijs
+bike10_klasse_ziekenhuis
+```
+
+These are used to build the amenity-specific access scores.
 
 ---
 
-## 5. Bike-10 Access Score
+## Optional Dataset
 
-The dashboard creates a **continuous access score** instead of only using a binary yes/no score.
+### `Bike_Trip purpose.xlsx`
 
-The score is calculated from five amenity-access components:
+This file is optional. If it exists, the dashboard adds a cycling-purpose context graph.
 
-```text
-score_gp
-score_supermarket
-score_childcare
-score_school_distance
-score_schools_within_3km
-```
-
-For distance-based amenities, the logic is:
+Expected location:
 
 ```text
-0 km distance = 100 access score
-3 km or more = 0 access score
+datasets/Bike_Trip purpose.xlsx
 ```
 
-For the number of schools within 3 km, the score is scaled up to a maximum of 5 schools:
-
-```text
-0 schools = 0
-5 or more schools = 100
-```
-
-The final `bike10_access_score` is the average of these components.
-
-This continuous scoring method was chosen because the earlier binary method made many municipalities look like they had almost perfect access. The continuous score preserves differences between stronger and weaker access areas.
-
----
-
-## 6. Required Dataset 2: Detailed ODiN 2024
-
-### Expected file
-
-```text
-ODiN2024_DANS_Databestand_ Updated.xlsx
-```
-
-### Expected sheet
-
-```text
-ODiN2024_DANS_Databestand_v2.0
-```
-
-### Purpose in the dashboard
-
-This dataset is used to focus on the **lowest-income group** and inspect mode choice patterns.
-
-The dashboard filters the data to the lowest available `HHGestInkG` group and summarizes how that group travels by:
-
-- national mode choice,
-- first-10-minute trips,
-- trip purpose,
-- urbanisation class.
-
-### Required columns
-
-```text
-HHGestInkG
-Hvm
-MotiefV
-Sted
-Prov
-Reisduur
-FactorV
-```
-
-### Optional column
-
-```text
-AfstV
-```
-
-### Meaning of key columns
-
-| Column | Meaning |
-|---|---|
-| `HHGestInkG` | Household income group |
-| `Hvm` | Main transport mode |
-| `MotiefV` | Trip purpose |
-| `Sted` | Urbanisation class |
-| `Prov` | Province |
-| `Reisduur` | Travel duration |
-| `FactorV` | Trip weight |
-| `AfstV` | Trip distance, optional |
-
-### Performance note
-
-The ODiN file is large, so the dashboard avoids loading it repeatedly. It:
-
-- reads only the required columns,
-- loads ODiN only when an ODiN graph is opened in the carousel,
-- caches the resulting summaries with `st.cache_data`.
-
-The first ODiN graph may still take some time to load, but after that it should be faster.
-
----
-
-## 7. Optional Dataset 3: Bike Trip Purpose Context
-
-### Expected file
-
-```text
-Bike_Trip purpose.xlsx
-```
-
-### Expected sheet
+Expected sheet:
 
 ```text
 Bike_Trip purpse
 ```
 
-### Purpose in the dashboard
-
-This file provides lighter ODiN-derived cycling context. It is not municipality-specific, but it helps interpret cycling behaviour by trip purpose, bike type, and whether essential cycling trips are within 3 km.
-
-### Required columns
+Required columns:
 
 ```text
 AfstV
@@ -245,101 +125,66 @@ Total Trips
 Sample Trips
 ```
 
-If this file is missing, the dashboard still works, but the cycling-purpose context graph is skipped.
+If this file is missing, the dashboard still runs.
 
 ---
 
-## 8. Optional Dataset 4: ODiN Codebook
+## How the Access Score Works
 
-The script can use an ODiN codebook if it is found in the `datasets/` folder.
+The dashboard builds a consistent amenity-class access score from the `bike10_klasse_*` variables.
 
-The codebook helps translate coded values in ODiN, such as `Hvm`, `MotiefV`, `Sted`, and `Prov`, into readable labels.
-
-The script searches for a file with a name matching:
+Each amenity class is scored as:
 
 ```text
-Codeboek.*ODiN
-ODiN.*Codeboek
+0 reachable amenities  = 0
+1 reachable amenity    = 70
+2+ reachable amenities = 100
 ```
 
-If the codebook is missing, the dashboard still runs, but mode and urbanisation mapping may be less readable.
+The final `bike10_access_score` is the average of the available amenity scores.
+
+If `bike10_weighted_score` already exists in the dataset, the dashboard uses it as the main access score. If not, it uses the calculated class-based access score.
 
 ---
 
-## 9. Graph Carousel
+## Main Dashboard Views
 
-The dashboard uses a carousel instead of a long list of graphs. Use the **Previous graph** and **Next graph** buttons to cycle through the available result views.
+The graph explorer contains the original, unchanged dataset views:
 
-Current graph list:
+1. **Access-Usage Heatmap**  
+   Shows municipalities by Bike-10 access score and first-10-minute usage. It highlights:
+   - environmental success: high access and high usage,
+   - policy opportunity: high access but lower usage,
+   - access gaps: lower access with cycling demand.
 
-1. **Selected municipality in national access-income context**  
-   Shows the selected municipality compared with other municipalities. If income data is missing, it falls back to an access-vulnerability graph.
+2. **3 km bike-shed for selected neighbourhood**  
+   Lets the user choose a neighbourhood inside the selected municipality and displays an approximate 3 km cycling radius.  
+   Boundary matching now tries:
+   - neighbourhood code,
+   - municipality + neighbourhood name,
+   - unique neighbourhood-name match,
+   - municipality-centre fallback if no safe match is found.
 
-2. **Selected municipality essential function audit**  
-   Compares GP, supermarket, childcare, school-distance, and school-count access for the selected municipality against national averages.
+3. **National access-income context**  
+   Shows where the selected municipality sits compared with other municipalities using access score and low-income share.
 
-3. **Low-access neighbourhoods in selected municipality**  
-   Shows which neighbourhoods inside the selected municipality have the weakest Bike-10 access scores.
+4. **Essential function audit**  
+   Compares the selected municipality with the national average for each amenity category.
 
-4. **Neighbourhood access vs low-income share in selected municipality**  
-   Checks whether lower-access neighbourhoods also have higher low-income shares. If income is missing, it falls back to a neighbourhood access ranking.
+5. **Low-access neighbourhood ranking**  
+   Lists the weakest-access neighbourhoods in the selected municipality.
 
-5. **Low-income national mode choice**  
-   Uses detailed ODiN to show the national mode split for the lowest-income group.
+6. **Neighbourhood access vs low-income share**  
+   Checks whether low-access neighbourhoods overlap with higher low-income shares.
 
-6. **Low-income first-10-minute mode choice**  
-   Uses `Reisduur <= 10` to compare transport modes within the first 10 minutes. This keeps the comparison equal across bike, car, and public transport instead of using only a 3 km cycling threshold.
-
-7. **Low-income mode choice by trip purpose**  
-   Shows whether the lowest-income group relies more on car, bike, or public transport for different purposes.
-
-8. **Low-income mode choice by urbanisation**  
-   Shows how low-income mode choice changes across urbanisation classes.
-
-9. **Cycling-purpose context from Bike Trip file**  
-   Uses the lighter Bike Trip file to show essential cycling trips within 3 km and cycling trips by purpose and bike type.
-
-The first four graphs change when the selected municipality changes. The ODiN graphs are national low-income summaries, so they do not change by municipality in this MVP.
+7. **Cycling-purpose context**  
+   Uses the optional Bike Trip Purpose file to summarize essential cycling trips and bike type patterns.
 
 ---
 
-## 10. Low-Income Focus
+## What-If Scenario Section
 
-The dashboard focuses on low-income residents in two ways:
-
-1. From CBS KWB, it uses `p_ink_li` as the municipality and neighbourhood low-income context.
-2. From ODiN, it filters to the lowest available `HHGestInkG` group.
-
-The ODiN low-income filter is displayed in the interface, for example:
-
-```text
-ODiN filter: lowest HHGestInkG group = 1; filtered rows = 12,828.
-```
-
-This means the ODiN mode-choice graphs are only describing the lowest-income group.
-
----
-
-## 11. Policy Case Logic
-
-The dashboard classifies municipalities based on access and low-income context.
-
-The current policy cases are:
-
-| Policy case | Meaning |
-|---|---|
-| High access / lower low-income pressure | Access is strong and low-income pressure is relatively lower |
-| High access / higher low-income pressure | Access is strong, but equity attention is still important |
-| Low access / lower low-income pressure | Access weakness exists, but low-income pressure is less concentrated |
-| Low access / higher low-income pressure | Priority equity case: weaker access and stronger low-income pressure overlap |
-
-These are decision-support labels, not causal claims.
-
----
-
-## 12. What-If Scenario Section
-
-At the bottom of the dashboard, the user can select a scenario from the sidebar:
+The sidebar lets the user choose one scenario:
 
 ```text
 No scenario
@@ -350,98 +195,89 @@ Improve cycling accessibility by 10%
 Improve cycling accessibility by 20%
 ```
 
-The selected scenario changes the scenario access score and policy case.
+The original graphs stay unchanged.  
+The scenario section separately shows the updated views after applying the scenario:
 
-The scenario model is simple and illustrative. It is used for demonstration and policy discussion, not for causal prediction.
+- updated Bike-10 access score,
+- updated policy case,
+- updated Access-Usage Heatmap,
+- updated Essential Function Audit,
+- updated Low-Access Neighbourhood Ranking.
+
+The scenario model is intentionally simple and illustrative. It supports policy discussion, not causal prediction.
 
 ---
 
-## 13. Gemini Policy Assistant
+## AI Policy Assistant
 
-The dashboard includes a Gemini-based AI policy assistant at the bottom.
-
-Example questions shown in the interface include:
+At the bottom of the dashboard, users can ask questions such as:
 
 ```text
 What if we add a supermarket to the lowest-access neighbourhoods?
-```
-
-```text
 Should this municipality prioritise amenities or cycling infrastructure?
-```
-
-```text
 How does the low-income focus change the recommendation?
-```
-
-```text
 Give me a short policy recommendation for a presentation slide.
 ```
 
-The assistant receives the selected municipality, current access score, low-income share, low-access neighbourhood share, selected scenario, and scenario score. It is instructed to:
+The assistant receives only the current dashboard context, including:
 
-- focus on low-income equity,
-- avoid causal claims,
-- avoid inventing numbers,
-- provide concise policy-oriented advice.
+- selected municipality,
+- original access and usage scores,
+- low-income share,
+- low-access neighbourhood share,
+- selected scenario,
+- updated access and usage scores.
 
-If Gemini is unavailable, the dashboard uses a rule-based fallback response.
+If Gemini is unavailable or the API key is empty, the dashboard uses a rule-based fallback answer.
 
 ---
 
-## 14. Gemini API Key Setup
+## Gemini Setup
 
 Install the Gemini package:
 
 ```bash
-pip install google-genai
+python3 -m pip install google-genai
 ```
 
-In `topic3_dashboard.py`, find:
+In the dashboard script, find:
 
 ```python
-GEMINI_API_KEY = "PASTE_YOUR_GEMINI_API_KEY_HERE"
+GEMINI_API_KEY = ""
 ```
 
-Replace it with your own API key:
+Paste your key inside the quotes:
 
 ```python
 GEMINI_API_KEY = "your_actual_api_key_here"
 ```
 
-Do not upload your real API key to GitHub or include it in the final report.
-
-The script tries Gemini models with available quota. If a model fails due to quota, the script can fall back to another model or to the rule-based assistant.
+Do not upload your real API key to GitHub or submit it in the report.
 
 ---
 
-## 15. Installation
+## Installation
 
-From the project folder, install the required packages:
+Install the required packages:
 
 ```bash
-pip install streamlit pandas numpy plotly openpyxl google-genai
+python3 -m pip install streamlit plotly pandas numpy openpyxl requests folium streamlit-folium google-genai
 ```
 
-If you do not want to use Gemini, the dashboard can still run without a working API key, but the assistant will use the fallback response.
+If Gemini is not used, the dashboard still runs with the fallback assistant.
 
 ---
 
-## 16. How to Run
+## Running the Dashboard
 
 From the project folder, run:
 
 ```bash
-streamlit run topic3_dashboard.py
+streamlit run topic3_dashboard_final.py
 ```
 
-If your file has a different name, run that file instead, for example:
-
-```bash
-streamlit run topic3_dashboard_low_income_simplified_muni_fix_v4.py
-```
-
-Streamlit will open a browser window. If it does not open automatically, copy the local URL shown in the terminal, usually:
+Streamlit will open the dashboard in your browser.  
+If it does not open automatically, copy the local URL from the terminal, usually:
 
 ```text
 http://localhost:8501
@@ -449,13 +285,20 @@ http://localhost:8501
 
 ---
 
-## 17. How to Use the Dashboard
+## Quick Use Steps
 
-1. Put the required files in the `datasets/` folder.
-2. Start the dashboard with Streamlit.
-3. Check the three dataset bubbles at the top.
-4. Select a municipality in the sidebar.
-5. Select a what-if scenario in the sidebar.
-6. Use Previous / Next to cycle through graphs.
-7. Use the Gemini assistant at the bottom to ask policy questions.
+1. Put `combined_neighbourhood_dataset.csv` in the `datasets/` folder.
+2. Optionally add `Bike_Trip purpose.xlsx`.
+3. Run the Streamlit command.
+4. Check that the dataset cards show the files as found.
+5. Select a municipality from the map or dropdown.
+6. Cycle through the graph explorer.
+7. Choose a what-if scenario in the sidebar.
+8. Read the updated scenario graphs.
+9. Ask the assistant for a policy recommendation.
 
+---
+
+## Summary of the Final MVP
+
+The final dashboard provides a practical, low-income-focused urban planning interface. It combines neighbourhood access data, municipality-level summaries, map-based selection, scenario testing, and an LLM-style explanation layer. The tool is designed to help policymakers quickly identify where 10-minute cycling access is strong, where access is weak, where low-income residents may be more affected, and what type of intervention is most reasonable to discuss.
