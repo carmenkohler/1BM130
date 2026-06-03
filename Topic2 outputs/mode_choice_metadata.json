@@ -1,6 +1,6 @@
 {
-  "model_type": "topic2_mode_choice_xgboost_daan_corrected",
-  "source_notebook": "Daan_Topic2_Corrected.ipynb",
+  "model_type": "XGBoost_mode_pred",
+  "source_notebook": "Topic2_ModePrediction.ipynb",
   "target": "KHvm_recoded_4class",
   "target_classes": {
     "0": "Car",
