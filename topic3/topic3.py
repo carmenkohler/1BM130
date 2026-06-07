@@ -1326,21 +1326,24 @@ st.markdown(
 # 12. Graph explorer: original views only
 # ============================================================
 
-GRAPH_TITLES = [
-    "Feature 1: Access-Usage Heatmap",
-    "3 km bike-shed for selected neighbourhood",
-    "Selected municipality in national access-income context",
-    "Selected municipality essential function audit",
-    "Low-access neighbourhoods in selected municipality",
-    "Neighbourhood access vs low-income share in selected municipality",
-    "Cycling-purpose context from Bike Trip file"
+GRAPH_CONFIG = [
+    ("access_usage_heatmap", "Feature 1: Access-Usage Heatmap"),
+    ("bike_shed", "3 km bike-shed for selected neighbourhood"),
+    ("access_income_context", "Selected municipality in national access-income context"),
+    ("essential_audit", "Selected municipality essential function audit"),
+    ("low_access_ranking", "Low-access neighbourhoods in selected municipality"),
+    ("access_vs_low_income", "Neighbourhood access vs low-income share in selected municipality"),
+    ("bike_trip_context", "Cycling-purpose context from Bike Trip file")
 ]
+
+GRAPH_TITLES = [title for _, title in GRAPH_CONFIG]
+GRAPH_KEYS = [key for key, _ in GRAPH_CONFIG]
 
 if "graph_index" not in st.session_state:
     st.session_state.graph_index = 0
 
 # Prevent old saved graph_index from pointing beyond new shortened list.
-if st.session_state.graph_index >= len(GRAPH_TITLES):
+if st.session_state.graph_index >= len(GRAPH_CONFIG):
     st.session_state.graph_index = 0
 
 st.markdown("### Graph explorer: original dataset views")
@@ -1348,13 +1351,17 @@ st.markdown("### Graph explorer: original dataset views")
 nav1, nav2, nav3 = st.columns([1, 2, 1])
 
 if nav1.button("← Previous graph", use_container_width=True):
-    st.session_state.graph_index = (st.session_state.graph_index - 1) % len(GRAPH_TITLES)
+    st.session_state.graph_index = (st.session_state.graph_index - 1) % len(GRAPH_CONFIG)
+    st.rerun()
 
 if nav3.button("Next graph →", use_container_width=True):
-    st.session_state.graph_index = (st.session_state.graph_index + 1) % len(GRAPH_TITLES)
+    st.session_state.graph_index = (st.session_state.graph_index + 1) % len(GRAPH_CONFIG)
+    st.rerun()
+
+current_graph_key, current_graph_title = GRAPH_CONFIG[st.session_state.graph_index]
 
 nav2.markdown(
-    f"<div class='section-card'><b>Current graph:</b> {GRAPH_TITLES[st.session_state.graph_index]}</div>",
+    f"<div class='section-card'><b>Current graph:</b> {current_graph_title}</div>",
     unsafe_allow_html=True
 )
 
@@ -1550,8 +1557,8 @@ def render_bikeshed_map():
     )
 
 
-def render_graph(index):
-    if index == 0:
+def render_graph(graph_key):
+    if graph_key == "access_usage_heatmap":
         plot_df = municipalities_df.copy()
 
         plot_df["State"] = np.where(
@@ -1611,10 +1618,10 @@ def render_graph(index):
             "Access comes from Bike-10 amenity accessibility; usage comes from pct_within_10min in the combined neighbourhood dataset."
         )
 
-    elif index == 1:
+    elif graph_key == "bike_shed":
         render_bikeshed_map()
 
-    elif index == 2:
+    elif graph_key == "access_income_context":
         base = municipalities_df.copy()
 
         base["State"] = np.where(
@@ -1651,7 +1658,7 @@ def render_graph(index):
             "It shows whether the selected municipality combines weaker access with a higher share of low-income residents."
         )
 
-    elif index == 3:
+    elif graph_key == "essential_audit":
         selected_scores = []
 
         for col in score_cols:
@@ -1693,7 +1700,7 @@ def render_graph(index):
             "This fixes the earlier issue where school availability used a different metric."
         )
 
-    elif index == 4:
+    elif graph_key == "low_access_ranking":
         top = selected_neighbourhoods.sort_values("bike10_access_score").head(20)
 
         fig = px.bar(
@@ -1717,7 +1724,7 @@ def render_graph(index):
             f"{urbanisation_code_explanation()}"
         )
 
-    elif index == 5:
+    elif graph_key == "access_vs_low_income":
         fig = px.scatter(
             selected_neighbourhoods,
             x="p_ink_li",
@@ -1743,7 +1750,7 @@ def render_graph(index):
             f"{urbanisation_code_explanation()}"
         )
 
-    elif index == 6:
+    elif graph_key == "bike_trip_context":
         if bike_context is None:
             st.warning("Bike_Trip purpose.xlsx was not found or could not be read.")
             return
@@ -1782,7 +1789,7 @@ def render_graph(index):
             st.plotly_chart(fig, use_container_width=True)
 
 
-render_graph(st.session_state.graph_index)
+render_graph(current_graph_key)
 
 
 # ============================================================
