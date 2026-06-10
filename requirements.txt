@@ -11,3 +11,6 @@ networkx
 geopandas
 shapely
 statsmodels
+scikit-learn
+xgboost
+shap
