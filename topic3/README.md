@@ -1,25 +1,15 @@
 # 10-Minute Cycling City Policy Dashboard
+#Topic 3
 
-## Overview
+## 1. Overview
 
-This dashboard is the minimum viable product for **Topic 3: LLM-based decision-support interface**.  
-It turns the project outputs into a simple policy tool where a user can inspect 10-minute cycling accessibility, low-income context, local usage patterns, and simple what-if scenarios.
-
-The current dashboard focuses on:
-
-- **10-minute cycling access** to essential amenities.
-- **Low-income neighbourhood context** using `p_ink_li`.
-- **First-10-minute usage** using `pct_within_10min`.
-- **Municipality and neighbourhood inspection** through maps and interactive graphs.
-- **Scenario testing** for amenity or accessibility improvements.
-- **Gemini / fallback assistant** for policy-oriented explanations.
-
+This readme is for  Topic 3 and its code "topic3.py".
 
 ---
 
-## What the Dashboard Does
+## 1.1 What the Dashboard Does
 
-The dashboard automatically searches the local `datasets/` folder for the required project data and then builds an interface with:
+The dashboard builds an interface with:
 
 1. Dataset status cards showing whether the required files were found.
 2. A Netherlands municipality map for selecting a municipality.
@@ -34,102 +24,78 @@ The dashboard automatically searches the local `datasets/` folder for the requir
 
 ---
 
-## Folder Setup
+## 2. Setup
 
-Place the dashboard script in the project folder and create a `datasets/` folder next to it.
+The existing setup for this topic 3 has been already set up as follows:
 
 ```text
-Q4-HW/
-├── topic3_dashboard_final.py
+topic3/
+├── topic3.py
 ├── datasets/
 │   ├── combined_neighbourhood_dataset.csv
-│   └── Bike_Trip purpose.xlsx              # optional
+│   └── Bike_Trip purpose.xlsx              
 └── data_cache/
     └── topic3/                             # created automatically
 ```
 
-The dashboard creates and uses `data_cache/topic3/` automatically for downloaded map boundary files.
+Please do not change this setup as the code assumes this file hierarchy. Every file is all set up in their correct locations.
 
 ---
 
-## Required Dataset
+## 2.1 Installation
+
+Install the required packages:
+
+```bash
+python3 -m pip install streamlit plotly pandas numpy openpyxl requests folium streamlit-folium google-genai
+```
+
+## 2.2 Gemini Setup
+
+This project uses Google Gemini API, for Gemini 3.5 Flash.
+Get your own free API key in https://aistudio.google.com/.  You can create you own API key under Dashboard.
+
+
+In the code "topic3.py", find:
+
+```python
+GEMINI_API_KEY = ""
+```
+
+Paste your key inside the quotes:
+
+```python
+GEMINI_API_KEY = "your_actual_api_key_here"
+```
+---
+## 2.3 Running the Dashboard
+
+From the project folder, run:
+
+```bash
+streamlit run topic3.py
+```
+
+Streamlit will open the dashboard in your browser.  
+If it does not open automatically, copy the local URL from the terminal, usually:
+
+```text
+http://localhost:8501
+```
+
+---
+
+## 3. Details
+
+## 3.1 Datasets used
 
 ### `combined_neighbourhood_dataset.csv`
 
-This is the main dataset used by the dashboard. It should be placed inside:
-
-```text
-datasets/combined_neighbourhood_dataset.csv
-```
-
-The dashboard expects this file to already contain the merged neighbourhood-level information from the earlier project stages.
-
-### Required columns
-
-```text
-regio
-gm_naam
-a_inw
-bev_dich
-p_ink_li
-ste_mvs
-pct_within_10min
-```
-
-### Important expected columns
-
-The dashboard also looks for `bike10_klasse_*` amenity columns, for example:
-
-```text
-bike10_klasse_apotheek
-bike10_klasse_basisschool
-bike10_klasse_bushalte
-bike10_klasse_huisarts
-bike10_klasse_kinderopvang
-bike10_klasse_supermarkt
-bike10_klasse_treinstation
-bike10_klasse_voortgezet_onderwijs
-bike10_klasse_ziekenhuis
-```
-
-These are used to build the amenity-specific access scores.
-
----
-
-## Optional Dataset
-
 ### `Bike_Trip purpose.xlsx`
 
-This file is optional. If it exists, the dashboard adds a cycling-purpose context graph.
+These are already in the correct place as described above in 2. Setup. 
 
-Expected location:
-
-```text
-datasets/Bike_Trip purpose.xlsx
-```
-
-Expected sheet:
-
-```text
-Bike_Trip purpse
-```
-
-Required columns:
-
-```text
-AfstV
-Bike type (main mode)
-Urbanization level
-Trip purpose
-Total Trips
-Sample Trips
-```
-
-If this file is missing, the dashboard still runs.
-
----
-
-## How the Access Score Works
+## 3.2 How the Access Score Works
 
 The dashboard builds a consistent amenity-class access score from the `bike10_klasse_*` variables.
 
@@ -147,7 +113,7 @@ If `bike10_weighted_score` already exists in the dataset, the dashboard uses it 
 
 ---
 
-## Main Dashboard Views
+## 3.3 Main Dashboard Views
 
 The graph explorer contains the original, unchanged dataset views:
 
@@ -182,7 +148,7 @@ The graph explorer contains the original, unchanged dataset views:
 
 ---
 
-## What-If Scenario Section
+## 3.4 What-If Scenario Section
 
 The sidebar lets the user choose one scenario:
 
@@ -204,11 +170,10 @@ The scenario section separately shows the updated views after applying the scena
 - updated Essential Function Audit,
 - updated Low-Access Neighbourhood Ranking.
 
-The scenario model is intentionally simple and illustrative. It supports policy discussion, not causal prediction.
 
 ---
 
-## AI Policy Assistant
+##  3.5 AI Policy Assistant
 
 At the bottom of the dashboard, users can ask questions such as:
 
@@ -232,73 +197,13 @@ If Gemini is unavailable or the API key is empty, the dashboard uses a rule-base
 
 ---
 
-## Gemini Setup
+## 3.6 Quick Use Steps
 
-Install the Gemini package:
+1. Run the Streamlit command.
+2. Check that the dataset cards show the files as found.
+3. Select a municipality from the map or dropdown.
+4. Cycle through the graph explorer.
+5. Choose a what-if scenario in the sidebar.
+6. Read the updated scenario graphs.
+7. Ask the assistant for a policy recommendation.
 
-```bash
-python3 -m pip install google-genai
-```
-
-In the dashboard script, find:
-
-```python
-GEMINI_API_KEY = ""
-```
-
-Paste your key inside the quotes:
-
-```python
-GEMINI_API_KEY = "your_actual_api_key_here"
-```
-
-Do not upload your real API key to GitHub or submit it in the report.
-
----
-
-## Installation
-
-Install the required packages:
-
-```bash
-python3 -m pip install streamlit plotly pandas numpy openpyxl requests folium streamlit-folium google-genai
-```
-
-If Gemini is not used, the dashboard still runs with the fallback assistant.
-
----
-
-## Running the Dashboard
-
-From the project folder, run:
-
-```bash
-streamlit run topic3_dashboard_final.py
-```
-
-Streamlit will open the dashboard in your browser.  
-If it does not open automatically, copy the local URL from the terminal, usually:
-
-```text
-http://localhost:8501
-```
-
----
-
-## Quick Use Steps
-
-1. Put `combined_neighbourhood_dataset.csv` in the `datasets/` folder.
-2. Optionally add `Bike_Trip purpose.xlsx`.
-3. Run the Streamlit command.
-4. Check that the dataset cards show the files as found.
-5. Select a municipality from the map or dropdown.
-6. Cycle through the graph explorer.
-7. Choose a what-if scenario in the sidebar.
-8. Read the updated scenario graphs.
-9. Ask the assistant for a policy recommendation.
-
----
-
-## Summary of the Final MVP
-
-The final dashboard provides a practical, low-income-focused urban planning interface. It combines neighbourhood access data, municipality-level summaries, map-based selection, scenario testing, and an LLM-style explanation layer. The tool is designed to help policymakers quickly identify where 10-minute cycling access is strong, where access is weak, where low-income residents may be more affected, and what type of intervention is most reasonable to discuss.
